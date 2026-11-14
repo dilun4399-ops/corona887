@@ -166,7 +166,8 @@ export function useHandTracking(enabled: boolean) {
         video.srcObject = stream;
         await video.play();
 
-        const vision = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+        const assetBase = `${import.meta.env.BASE_URL}mediapipe`.replace(/\/+$/, '');
+        const vision = await FilesetResolver.forVisionTasks(`${assetBase}/wasm`);
         if (cancelled) {
           cleanup();
           return;
@@ -175,7 +176,7 @@ export function useHandTracking(enabled: boolean) {
         try {
           handLandmarker = await HandLandmarker.createFromOptions(vision, {
             baseOptions: {
-              modelAssetPath: '/mediapipe/hand_landmarker.task',
+              modelAssetPath: `${assetBase}/hand_landmarker.task`,
               delegate: 'GPU',
             },
             runningMode: 'VIDEO',
@@ -187,7 +188,7 @@ export function useHandTracking(enabled: boolean) {
         } catch {
           handLandmarker = await HandLandmarker.createFromOptions(vision, {
             baseOptions: {
-              modelAssetPath: '/mediapipe/hand_landmarker.task',
+              modelAssetPath: `${assetBase}/hand_landmarker.task`,
               delegate: 'CPU',
             },
             runningMode: 'VIDEO',

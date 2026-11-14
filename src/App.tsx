@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Camera,
   ChevronDown,
@@ -8,6 +8,8 @@ import {
   RotateCcw,
   Snowflake,
   Sparkles,
+  Volume2,
+  VolumeX,
   Wind,
 } from 'lucide-react';
 import {
@@ -17,6 +19,7 @@ import {
   type SnowMode,
 } from './scene/ChristmasSceneCanvas';
 import { useHandTracking } from './hooks/useHandTracking';
+import { LofiChristmasJazzPlayer } from './audio/lofiChristmasJazz';
 
 export default function App() {
   const [settings, setSettings] = useState<SceneSettings>({
@@ -30,7 +33,9 @@ export default function App() {
   const [controlsOpen, setControlsOpen] = useState(false);
   const [zenMode, setZenMode] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
 
+  const audioPlayerRef = useRef<LofiChristmasJazzPlayer | null>(null);
   const { videoRef, handStateRef, uiState } = useHandTracking(cameraEnabled);
 
   useEffect(() => {
@@ -42,6 +47,26 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      audioPlayerRef.current?.dispose();
+      audioPlayerRef.current = null;
+    };
+  }, []);
+
+  const toggleMusic = () => {
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new LofiChristmasJazzPlayer();
+    }
+    if (musicPlaying) {
+      audioPlayerRef.current.pause();
+      setMusicPlaying(false);
+    } else {
+      void audioPlayerRef.current.play();
+      setMusicPlaying(true);
+    }
+  };
 
   const cycleSnow = () => {
     setSettings((prev) => {
@@ -226,6 +251,25 @@ export default function App() {
                 >
                   <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Ribbon: {settings.ribbonMode === 'calm' ? 'Calm' : 'Radiant'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleMusic}
+                  aria-pressed={musicPlaying}
+                  aria-label={musicPlaying ? 'Pause ambient Christmas jazz' : 'Play ambient Christmas jazz'}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs tracking-wide transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-[#e3ba6e] ${
+                    musicPlaying
+                      ? 'bg-[#5c0f1b]/85 text-[#fce8b8] border border-[#d9ad5b]/35'
+                      : 'text-[#cbb58a]/80 border border-transparent hover:bg-[#1f0a0e] hover:text-[#f5dfa9]'
+                  }`}
+                >
+                  {musicPlaying ? (
+                    <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <VolumeX className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  <span>Jazz: {musicPlaying ? 'Playing' : 'Paused'}</span>
                 </button>
 
                 <span className="mx-0.5 hidden h-4 w-px bg-[#d9ad5b]/20 sm:inline-block" aria-hidden="true" />
