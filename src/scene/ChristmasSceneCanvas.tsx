@@ -175,8 +175,10 @@ export function ChristmasSceneCanvas({ settings, handStateRef }: ChristmasSceneC
     controls.enableZoom = true;
     controls.minDistance = 4.0;
     controls.maxDistance = 18.0;
-    controls.minPolarAngle = Math.PI * 0.22;
-    controls.maxPolarAngle = Math.PI * 0.56;
+    // Keep camera strictly level so the tree never tilts or leans when dragging horizontally
+    const levelPolarAngle = Math.PI * 0.492;
+    controls.minPolarAngle = levelPolarAngle;
+    controls.maxPolarAngle = levelPolarAngle;
     controls.rotateSpeed = 0.72;
     controls.zoomSpeed = 0.85;
     controls.update();
@@ -228,6 +230,15 @@ export function ChristmasSceneCanvas({ settings, handStateRef }: ChristmasSceneC
     const wineFill = new THREE.PointLight(0x941a2c, 2.1, 14, 1.5);
     wineFill.position.set(-3.4, 2.8, 3.4);
     scene.add(wineFill);
+
+    // Balanced back-side warm fill so every 360-degree face looks equally luminous when rotated
+    const backWarmFill = new THREE.PointLight(0xe0b56d, 2.4, 15, 1.4);
+    backWarmFill.position.set(-2.2, 3.1, -4.8);
+    scene.add(backWarmFill);
+
+    const backWineFill = new THREE.PointLight(0xa31f33, 1.9, 14, 1.5);
+    backWineFill.position.set(3.4, 2.6, -3.6);
+    scene.add(backWineFill);
 
     // Build modular 3D scene rigs
     const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -415,7 +426,10 @@ export function ChristmasSceneCanvas({ settings, handStateRef }: ChristmasSceneC
       scaleFactor += (targetScale - scaleFactor) * 0.1;
       treeRootGroup.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
-      // Gentle meditative tree, mouse parallax, and hand-tracking viewpoint control
+      // Strictly horizontal Y-axis rotation (no tilting/pitching in X/Z)
+      treeRootGroup.rotation.x = 0;
+      treeRootGroup.rotation.z = 0;
+
       if (resetAnimRef.current) {
         const curAsp = camera.aspect || 1;
         const targetDist = computeHomeDistance(curAsp);
@@ -431,33 +445,19 @@ export function ChristmasSceneCanvas({ settings, handStateRef }: ChristmasSceneC
           resetAnimRef.current = false;
         }
       } else if (hand.active && hand.handDetected) {
-        const targetRotY = hand.handX * 1.45;
-        const targetRotX = -hand.handY * 0.25;
-        treeRootGroup.rotation.y = THREE.MathUtils.damp(treeRootGroup.rotation.y, targetRotY, 4.0, delta);
-        treeRootGroup.rotation.x = THREE.MathUtils.damp(treeRootGroup.rotation.x, targetRotX, 4.0, delta);
+        // Hand movement controls left/right horizontal rotation only
+        const targetRotY = hand.handX * Math.PI;
+        treeRootGroup.rotation.y = THREE.MathUtils.damp(treeRootGroup.rotation.y, targetRotY, 4.2, delta);
         treeRootGroup.position.y = THREE.MathUtils.damp(treeRootGroup.position.y, 3.05, 3.0, delta);
       } else if (currentSettings.autoDrift && !isUserInteracting) {
-        driftAngle += delta * 0.11;
-        const targetRotY = Math.sin(driftAngle) * 0.22 + pointer.smoothX * 0.09;
+        driftAngle += delta * 0.14;
+        const targetRotY = Math.sin(driftAngle) * 0.35 + pointer.smoothX * 0.09;
         treeRootGroup.rotation.y = THREE.MathUtils.damp(treeRootGroup.rotation.y, targetRotY, 2.5, delta);
-        treeRootGroup.rotation.x = THREE.MathUtils.damp(
-          treeRootGroup.rotation.x,
-          -pointer.smoothY * 0.035,
-          3.0,
-          delta
-        );
-        // Subtle floating breath on the tree assembly
-        treeRootGroup.position.y = 3.05 + Math.sin(elapsed * 0.55) * 0.035;
+        treeRootGroup.position.y = THREE.MathUtils.damp(treeRootGroup.position.y, 3.05, 2.5, delta);
       } else {
         treeRootGroup.rotation.y = THREE.MathUtils.damp(
           treeRootGroup.rotation.y,
           pointer.smoothX * 0.09,
-          3.0,
-          delta
-        );
-        treeRootGroup.rotation.x = THREE.MathUtils.damp(
-          treeRootGroup.rotation.x,
-          -pointer.smoothY * 0.035,
           3.0,
           delta
         );

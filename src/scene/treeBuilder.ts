@@ -335,14 +335,14 @@ export function buildChristmasTree(
       const branchAngle =
         tierOffset + (b / primaryBranches) * Math.PI * 2 + (rand() - 0.5) * 0.24;
 
-      // Irregular per-branch reach creates organic notched gaps and feathery silhouette instead of a stiff cone
-      const branchReachBias = 0.78 + rand() * 0.4;
-      const branchYOffset = (rand() - 0.5) * 0.11;
+      // Subtle per-branch variation keeps feathery pine texture while ensuring every 360-degree face looks straight and balanced
+      const branchReachBias = 0.91 + rand() * 0.18;
+      const branchYOffset = (rand() - 0.5) * 0.06;
       const radialSteps = Math.max(2, Math.round(4 * (1 - hNorm * 0.5)));
 
       for (let step = 0; step < radialSteps; step++) {
         const rFrac = (step + 0.4) / (radialSteps + 0.15);
-        const boughLen = THREE.MathUtils.lerp(1.22, 0.5, hNorm) * (0.85 + rand() * 0.3);
+        const boughLen = THREE.MathUtils.lerp(1.22, 0.5, hNorm) * (0.9 + rand() * 0.2);
         const targetR = baseEnvR * branchReachBias * rFrac;
         const startR = Math.max(0.05, targetR - boughLen * 0.34);
 
@@ -352,9 +352,9 @@ export function buildChristmasTree(
         const pz = Math.sin(branchAngle) * startR;
         const py = tierY + sagY;
 
-        const yaw = Math.atan2(px, pz) + (rand() - 0.5) * 0.38;
-        const pitch = THREE.MathUtils.lerp(0.36, -0.38, hNorm) + (rand() - 0.5) * 0.24;
-        const roll = (rand() - 0.5) * 0.45;
+        const yaw = Math.atan2(px, pz) + (rand() - 0.5) * 0.22;
+        const pitch = THREE.MathUtils.lerp(0.36, -0.38, hNorm) + (rand() - 0.5) * 0.16;
+        const roll = (rand() - 0.5) * 0.22;
 
         const scaleW = boughLen * (0.88 + rand() * 0.28);
         const scaleH = boughLen * (0.88 + rand() * 0.24);
@@ -453,14 +453,18 @@ export function buildChristmasTree(
   disposables.push(velvetBowMat);
 
   const bowSpecs = [
-    { hNorm: 0.78, angle: 0.18, scale: 0.95 },
-    { hNorm: 0.59, angle: -0.25, scale: 1.18 },
-    { hNorm: 0.44, angle: 0.32, scale: 1.28 },
-    { hNorm: 0.27, angle: -0.22, scale: 1.38 },
-    { hNorm: 0.09, angle: -0.38, scale: 1.44 },
-    { hNorm: 0.5, angle: 2.3, scale: 1.2 },
-    { hNorm: 0.25, angle: 3.9, scale: 1.32 },
-    { hNorm: 0.66, angle: -2.05, scale: 1.08 },
+    { hNorm: 0.78, angle: 0.15, scale: 0.95 },
+    { hNorm: 0.72, angle: 2.25, scale: 0.98 },
+    { hNorm: 0.66, angle: -2.05, scale: 1.06 },
+    { hNorm: 0.59, angle: -0.24, scale: 1.16 },
+    { hNorm: 0.53, angle: 1.48, scale: 1.18 },
+    { hNorm: 0.48, angle: -2.95, scale: 1.2 },
+    { hNorm: 0.42, angle: 0.36, scale: 1.26 },
+    { hNorm: 0.36, angle: -1.35, scale: 1.28 },
+    { hNorm: 0.28, angle: 2.82, scale: 1.32 },
+    { hNorm: 0.24, angle: -0.22, scale: 1.36 },
+    { hNorm: 0.14, angle: 1.75, scale: 1.4 },
+    { hNorm: 0.1, angle: -1.75, scale: 1.42 },
   ];
 
   interface BowRigItem {
