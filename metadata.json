@@ -1,0 +1,8 @@
+{
+  "name": "Noel Nocturne — Dark Luxury 3D Christmas Tree",
+  "description": "A real-time WebGL 3D dark luxury Christmas tree scene featuring black-cherry foliage, champagne gold flowing spiral ribbons, faceted starlight, and multi-layered snowfall.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

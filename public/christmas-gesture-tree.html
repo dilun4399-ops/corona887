@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Merry Christmas! — Dark Luxury 3D 手势粒子圣诞树</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,500&family=Great+Vibes&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 56%, #130408 0%, #060203 48%, #020102 100%);
+      user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 唯一保留的 UI：顶部居中金色发光 "Merry Christmas!" 标题 */
+    .title-header {
+      position: fixed;
+      top: 4.2%;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+      padding: 0 24px;
+    }
+
+    .title-glow {
+      filter: drop-shadow(0 0 18px rgba(232, 184, 96, 0.45))
+        drop-shadow(0 0 36px rgba(204, 142, 48, 0.24));
+    }
+
+    .title-text {
+      font-family: "Great Vibes", "Cormorant Garamond", Georgia, serif;
+      font-size: clamp(2.6rem, 5.4vw, 4.8rem);
+      font-weight: 400;
+      letter-spacing: 0.03em;
+      line-height: 1.25;
+      padding: 6px 28px;
+      background: linear-gradient(180deg, #fff7dd 0%, #efd291 48%, #c79342 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: #efd291;
+      text-align: center;
+    }
+
+    /* 隐藏用于后台手势识别的视频流元素 */
+    #webcam {
+      display: none;
+    }
+  </style>
+
+  <!-- Import Map：通过 ES Module CDN 引入 Three.js 与后期处理插件 -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- 页面唯一保留的 UI 元素：顶部居中金色发光标题 -->
+  <header class="title-header">
+    <div class="title-glow">
+      <h1 class="title-text">Merry Christmas!</h1>
+    </div>
+  </header>
+
+  <!-- 隐藏的摄像头节点：仅用于后台默默运行手势识别 -->
+  <video id="webcam" playsinline muted></video>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+    import {
+      FilesetResolver,
+      HandLandmarker
+    } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/+esm';
+
+    // =========================================================================
+    // 1. 生成程序化柔和星尘与五角星纹理
+    // =========================================================================
+    function createGlowSpriteTexture() {
+      const size = 128;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const cx = size / 2;
+      const cy = size / 2;
+
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cx);
+      grad.addColorStop(0.0, 'rgba(255, 252, 240, 1.0)');
+      grad.addColorStop(0.24, 'rgba(255, 232, 180, 0.85)');
+      grad.addColorStop(0.56, 'rgba(218, 165, 82, 0.24)');
+      grad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createStarTexture() {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const cx = size / 2;
+      const cy = size / 2;
+
+      const halo = ctx.createRadialGradient(cx, cy, 2, cx, cy, cx);
+      halo.addColorStop(0.0, 'rgba(255, 250, 224, 1.0)');
+      halo.addColorStop(0.2, 'rgba(255, 218, 138, 0.72)');
+      halo.addColorStop(0.55, 'rgba(204, 140, 56, 0.16)');
+      halo.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(0, 0, size, size);
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+        const r = i % 2 === 0 ? 54 : 22;
+        const x = Math.cos(angle) * r;
+        const y = Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      const starGrad = ctx.createLinearGradient(0, -54, 0, 54);
+      starGrad.addColorStop(0, '#fff7dc');
+      starGrad.addColorStop(0.5, '#f0ca75');
+      starGrad.addColorStop(1, '#c99038');
+      ctx.fillStyle = starGrad;
+      ctx.fill();
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    // =========================================================================
+    // 2. 初始化 Three.js 场景、相机、轨道控制与 Bloom 辉光后处理
+    // =========================================================================
+    const container = document.getElementById('canvas-container');
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x040204);
+    scene.fog = new THREE.FogExp2(0x040204, 0.016);
+
+    const camera = new THREE.PerspectiveCamera(44, width / height, 0.1, 120);
+    camera.position.set(0, 3.25, 11.4);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 2.95, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enablePan = false;
+    controls.minDistance = 6.2;
+    controls.maxDistance = 18.0;
+    controls.update();
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0.38, 0.48, 0.62);
+    composer.addPass(bloomPass);
+    composer.addPass(new OutputPass());
+
+    const glowTex = createGlowSpriteTexture();
+    const starTex = createStarTexture();
+
+    // =========================================================================
+    // 3. 背景稀疏星空与缓慢飘落的雪花点缀
+    // =========================================================================
+    const starCount = 480;
+    const starPos = new Float32Array(starCount * 3);
+    const starCol = new Float32Array(starCount * 3);
+    const cStarWarm = new THREE.Color('#fff1d6');
+    const cStarCool = new THREE.Color('#c8d4eb');
+    const cStarGold = new THREE.Color('#e3bc71');
+
+    for (let i = 0; i < starCount; i++) {
+      const r = 18 + Math.random() * 40;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPos[i * 3 + 1] = r * Math.cos(phi) + 2;
+      starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+
+      const pick = Math.random();
+      const c = pick < 0.55 ? cStarWarm : pick < 0.82 ? cStarGold : cStarCool;
+      starCol[i * 3] = c.r;
+      starCol[i * 3 + 1] = c.g;
+      starCol[i * 3 + 2] = c.b;
+    }
+
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
+    const starMat = new THREE.PointsMaterial({
+      size: 0.17,
+      map: glowTex,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const starField = new THREE.Points(starGeo, starMat);
+    scene.add(starField);
+
+    const snowCount = 260;
+    const snowPos = new Float32Array(snowCount * 3);
+    const snowSpeeds = new Float32Array(snowCount);
+    for (let i = 0; i < snowCount; i++) {
+      snowPos[i * 3] = (Math.random() - 0.5) * 18;
+      snowPos[i * 3 + 1] = Math.random() * 11 - 1;
+      snowPos[i * 3 + 2] = (Math.random() - 0.5) * 14;
+      snowSpeeds[i] = 0.25 + Math.random() * 0.45;
+    }
+    const snowGeo = new THREE.BufferGeometry();
+    snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+    const snowMat = new THREE.PointsMaterial({
+      size: 0.13,
+      color: 0xf7ebd2,
+      map: glowTex,
+      transparent: true,
+      opacity: 0.58,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const snowPoints = new THREE.Points(snowGeo, snowMat);
+    scene.add(snowPoints);
+
+    // =========================================================================
+    // 4. 构建清爽通透的 3D Dark Luxury 圣诞树粒子系统 (固定 1250 粒子)
+    // =========================================================================
+    const PARTICLE_COUNT = 1250;
+
+    // treePositions: 握拳时的圣诞树坐标
+    // explodePositions: 张开手掌时的“原地包裹树体的球形爆炸”坐标（严格限制 Z 深度）
+    // currentPositions & velocities: 当前坐标与瞬时物理速度（带阻尼减速和悬浮效果）
+    const treePositions = new Float32Array(PARTICLE_COUNT * 3);
+    const explodePositions = new Float32Array(PARTICLE_COUNT * 3);
+    const currentPositions = new Float32Array(PARTICLE_COUNT * 3);
+    const velocities = new Float32Array(PARTICLE_COUNT * 3);
+    const particleColors = new Float32Array(PARTICLE_COUNT * 3);
+    const phases = new Float32Array(PARTICLE_COUNT);
+    const fallRates = new Float32Array(PARTICLE_COUNT);
+
+    // 保留 Dark Luxury 配色：墨绿松针、黑樱桃/酒红、香槟金、暖象牙白
+    const colInkGreen = new THREE.Color('#1c5e3e');
+    const colPineEmerald = new THREE.Color('#328a58');
+    const colBlackCherry = new THREE.Color('#751324');
+    const colRubyRed = new THREE.Color('#ab2036');
+    const colChampagne = new THREE.Color('#ecc676');
+    const colWarmWhite = new THREE.Color('#fff3d4');
+    const colRugVelvet = new THREE.Color('#470d18');
+    const tmpColor = new THREE.Color();
+
+    function getTreeRadius(hNorm) {
+      const base = 2.06 * Math.pow(1 - hNorm * 0.96, 0.92);
+      const tierWave = 1.0 + 0.065 * Math.sin(hNorm * Math.PI * 14);
+      return base * tierWave;
+    }
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const role = Math.random();
+      let tx = 0, ty = 0, tz = 0;
+
+      if (role < 0.16) {
+        // 纤细柔和的香槟金螺旋光带（4.65圈紧贴树身，无底部大光环）
+        const t = Math.random();
+        ty = THREE.MathUtils.lerp(5.48, 0.42, t);
+        const hNorm = THREE.MathUtils.clamp((ty - 0.26) / 5.5, 0, 1);
+        const r = getTreeRadius(hNorm) + 0.045;
+        const angle = t * 4.65 * Math.PI * 2;
+        tx = Math.cos(angle) * r;
+        tz = Math.sin(angle) * r;
+        tmpColor.copy(colChampagne).lerp(colWarmWhite, Math.random() * 0.35);
+      } else if (role < 0.23) {
+        // 树底暗酒红圆形地毯 + 右侧两个奢华礼物盒轮廓
+        if (Math.random() < 0.7) {
+          const rad = Math.sqrt(Math.random()) * 2.68;
+          const ang = Math.random() * Math.PI * 2;
+          tx = Math.cos(ang) * rad;
+          ty = 0.05;
+          tz = Math.sin(ang) * rad;
+          tmpColor.copy(rad > 2.46 ? colChampagne : colRugVelvet);
+        } else {
+          const isBox1 = Math.random() < 0.55;
+          const cx = isBox1 ? 1.56 : 2.12;
+          const cz = isBox1 ? 1.62 : 1.02;
+          const w = isBox1 ? 0.56 : 0.44;
+          const h = isBox1 ? 0.42 : 0.34;
+          tx = cx + (Math.random() - 0.5) * w;
+          ty = 0.06 + Math.random() * h;
+          tz = cz + (Math.random() - 0.5) * w;
+          const isRibbon = Math.abs(tx - cx) < 0.06 || Math.abs(tz - cz) < 0.06 || ty > 0.06 + h * 0.9;
+          tmpColor.copy(isRibbon ? colChampagne : isBox1 ? colBlackCherry : colInkGreen);
+        }
+      } else {
+        // 清晰干净的锥形圣诞树主体与装饰点缀
+        const hNorm = Math.pow(Math.random(), 0.78) * 0.98;
+        ty = 0.28 + hNorm * 5.52;
+        const maxR = getTreeRadius(hNorm);
+        const rFrac = 0.36 + Math.pow(Math.random(), 0.45) * 0.66;
+        const r = maxR * rFrac;
+        const angle = Math.random() * Math.PI * 2;
+        tx = Math.cos(angle) * r;
+        tz = Math.sin(angle) * r;
+
+        const colorPick = Math.random();
+        if (colorPick < 0.50) {
+          tmpColor.copy(colInkGreen).lerp(colPineEmerald, Math.random());
+        } else if (colorPick < 0.75) {
+          tmpColor.copy(colBlackCherry).lerp(colRubyRed, Math.random());
+        } else if (colorPick < 0.92) {
+          tmpColor.copy(colChampagne);
+        } else {
+          tmpColor.copy(colWarmWhite);
+        }
+      }
+
+      treePositions[i * 3] = tx;
+      treePositions[i * 3 + 1] = ty;
+      treePositions[i * 3 + 2] = tz;
+
+      currentPositions[i * 3] = tx;
+      currentPositions[i * 3 + 1] = ty;
+      currentPositions[i * 3 + 2] = tz;
+
+      // 【关键修复】原地包裹树的球形爆炸坐标：
+      // 1) 半径控制在 1.4 ~ 3.65，确保全部停留在屏幕核心视野内；
+      // 2) 严格压缩 Z 轴偏移（乘以 0.5 并钳位在 [-2.0, +2.0]），绝不飞向镜头或深处消失。
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const shellRadius = 1.45 + Math.pow(Math.random(), 0.75) * 2.2;
+
+      const dx = Math.sin(phi) * Math.cos(theta) * shellRadius * 1.12;
+      const dy = Math.cos(phi) * shellRadius * 0.82;
+      const dz = Math.sin(phi) * Math.sin(theta) * shellRadius * 0.5;
+
+      explodePositions[i * 3] = THREE.MathUtils.clamp(tx * 0.35 + dx, -3.85, 3.85);
+      explodePositions[i * 3 + 1] = THREE.MathUtils.clamp(2.95 + dy, 0.45, 5.75);
+      explodePositions[i * 3 + 2] = THREE.MathUtils.clamp(tz * 0.35 + dz, -2.0, 2.0);
+
+      particleColors[i * 3] = tmpColor.r;
+      particleColors[i * 3 + 1] = tmpColor.g;
+      particleColors[i * 3 + 2] = tmpColor.b;
+
+      phases[i] = Math.random() * Math.PI * 2;
+      fallRates[i] = 0.08 + Math.random() * 0.14;
+    }
+
+    const treeGroup = new THREE.Group();
+    scene.add(treeGroup);
+
+    const treeGeo = new THREE.BufferGeometry();
+    const posAttr = new THREE.BufferAttribute(currentPositions, 3);
+    posAttr.setUsage(THREE.DynamicDrawUsage);
+    treeGeo.setAttribute('position', posAttr);
+    treeGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+
+    const treeMat = new THREE.PointsMaterial({
+      size: 0.19,
+      map: glowTex,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.94,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const treePoints = new THREE.Points(treeGeo, treeMat);
+    treePoints.frustumCulled = false;
+    treeGroup.add(treePoints);
+
+    // 树顶明亮的立体香槟金五角星
+    const topperMat = new THREE.SpriteMaterial({
+      map: starTex,
+      color: 0xffebb8,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const topperStar = new THREE.Sprite(topperMat);
+    topperStar.position.set(0, 6.08, 0);
+    topperStar.scale.set(1.12, 1.12, 1);
+    treeGroup.add(topperStar);
+
+    // =========================================================================
+    // 5. 后台静默运行 MediaPipe HandLandmarker 手势识别（无任何界面文字或视频预览）
+    // =========================================================================
+    const videoEl = document.getElementById('webcam');
+
+    let explodeTarget = 0.0;   // 0 = 握拳聚合；1 = 张手原地炸开
+    let lastTarget = 0.0;
+    let explodeProgress = 0.0;
+    let burstElapsed = 0.0;
+
+    let cameraActive = false;
+    let handLandmarker = null;
+    let lastVideoTime = -1;
+    let lastDetectTime = 0;
+
+    /**
+     * 核心手势判断算法（握拳 vs 张开手掌）：
+     * - 使用手腕(0)到中指根部(9)的距离作为掌心参考尺度，避免手部远近造成误判。
+     * - 统计食指(8)、中指(12)、无名指(16)、小指(20)指尖到手腕的归一化距离：
+     *   - 若 >= 3 根手指伸展且平均距离 > 1.55 -> 判定为“张开手掌 (open_palm)”，触发原地炸开。
+     *   - 若 >= 3 根手指弯曲且平均距离 < 1.25 -> 判定为“握拳 (fist)”，触发平滑聚合。
+     */
+    function classifyHandGesture(landmarks) {
+      if (!landmarks || landmarks.length < 21) return 'none';
+      const wrist = landmarks[0];
+      const middleMcp = landmarks[9];
+      const palmScale = Math.hypot(middleMcp.x - wrist.x, middleMcp.y - wrist.y) || 0.08;
+
+      const tips = [8, 12, 16, 20];
+      const pips = [6, 10, 14, 18];
+      let extended = 0;
+      let curled = 0;
+      let sumTipDist = 0;
+
+      for (let i = 0; i < tips.length; i++) {
+        const tip = landmarks[tips[i]];
+        const pip = landmarks[pips[i]];
+        const tipDist = Math.hypot(tip.x - wrist.x, tip.y - wrist.y) / palmScale;
+        const pipDist = Math.hypot(pip.x - wrist.x, pip.y - wrist.y) / palmScale;
+        sumTipDist += tipDist;
+
+        if (tipDist > pipDist * 1.14 && tipDist > 1.45) extended++;
+        else if (tipDist < pipDist * 1.06 || tipDist < 1.18) curled++;
+      }
+
+      const avgDist = sumTipDist / tips.length;
+      if (extended >= 3 && avgDist > 1.55) return 'open_palm';
+      if (curled >= 3 && avgDist < 1.25) return 'fist';
+      return 'none';
+    }
+
+    async function initSilentHandTracking() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+          audio: false
+        });
+        videoEl.srcObject = stream;
+        await videoEl.play();
+
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm'
+        );
+        handLandmarker = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          numHands: 1,
+          minHandDetectionConfidence: 0.55,
+          minTrackingConfidence: 0.55
+        });
+
+        cameraActive = true;
+      } catch {
+        // 摄像头未授权或不可用时静默降级：可通过轻点画面或按空格键切换聚合/炸开
+        cameraActive = false;
+      }
+    }
+
+    initSilentHandTracking();
+
+    // =========================================================================
+    // 6. 静默演示降级交互（轻点画面或空格键切换状态）与窗口自适应
+    // =========================================================================
+    const downPos = { x: 0, y: 0 };
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      downPos.x = e.clientX;
+      downPos.y = e.clientY;
+    });
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      const moveDist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+      if (moveDist < 6) {
+        explodeTarget = explodeTarget < 0.5 ? 1.0 : 0.0;
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        explodeTarget = explodeTarget < 0.5 ? 1.0 : 0.0;
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      composer.setSize(w, h);
+      bloomPass.resolution.set(w, h);
+    });
+
+    // =========================================================================
+    // 7. 主渲染与阻尼物理循环（原地炸开 + 阻尼减速悬浮缓落 + 握拳顺滑聚合）
+    // =========================================================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.05);
+      const elapsed = clock.getElapsedTime();
+
+      // 非阻塞手势推理调度（节流 >= 75ms，避免影响 Three.js 渲染帧率）
+      if (cameraActive && handLandmarker && videoEl.readyState >= 2) {
+        const now = performance.now();
+        if (videoEl.currentTime !== lastVideoTime && now - lastDetectTime >= 75) {
+          lastVideoTime = videoEl.currentTime;
+          lastDetectTime = now;
+          const result = handLandmarker.detectForVideo(videoEl, now);
+          const hand = result.landmarks?.[0];
+          const gesture = hand ? classifyHandGesture(hand) : 'none';
+          if (gesture === 'open_palm') explodeTarget = 1.0;
+          else if (gesture === 'fist') explodeTarget = 0.0;
+        }
+      }
+
+      // 检测到由“聚合”瞬间切换到“炸开”时，赋予粒子向四周原地弹开的初始速度脉冲
+      if (explodeTarget > 0.5 && lastTarget <= 0.5) {
+        burstElapsed = 0.0;
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          velocities[i3] = (explodePositions[i3] - currentPositions[i3]) * 3.6;
+          velocities[i3 + 1] = (explodePositions[i3 + 1] - currentPositions[i3 + 1]) * 3.6;
+          velocities[i3 + 2] = (explodePositions[i3 + 2] - currentPositions[i3 + 2]) * 3.2;
+        }
+      }
+      lastTarget = explodeTarget;
+
+      const smoothAlpha = 1 - Math.exp(-3.8 * delta);
+      explodeProgress = THREE.MathUtils.lerp(explodeProgress, explodeTarget, smoothAlpha);
+
+      const posArr = posAttr.array;
+
+      if (explodeTarget > 0.5) {
+        // 【爆炸态物理】：初速度爆发 -> 指数阻尼快速减速 -> 在树周围空中悬浮并缓缓飘落
+        burstElapsed += delta;
+        const velDamping = Math.exp(-4.2 * delta);
+        const slowFall = Math.min(0.45, burstElapsed * 0.045);
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          velocities[i3] *= velDamping;
+          velocities[i3 + 1] *= velDamping;
+          velocities[i3 + 2] *= velDamping;
+
+          // 悬浮呼吸微摆 + 缓慢下沉位移
+          const hoverX = Math.sin(elapsed * 0.85 + phases[i]) * 0.14;
+          const hoverY = Math.cos(elapsed * 0.72 + phases[i]) * 0.12 - slowFall * fallRates[i] * 6.0;
+          const hoverZ = Math.cos(elapsed * 0.65 + phases[i]) * 0.08;
+
+          const goalX = explodePositions[i3] + hoverX;
+          const goalY = Math.max(0.32, explodePositions[i3 + 1] + hoverY);
+          const goalZ = THREE.MathUtils.clamp(explodePositions[i3 + 2] + hoverZ, -2.1, 2.1);
+
+          posArr[i3] += velocities[i3] * delta;
+          posArr[i3 + 1] += velocities[i3 + 1] * delta;
+          posArr[i3 + 2] += velocities[i3 + 2] * delta;
+
+          const settle = 1 - Math.exp(-2.3 * delta);
+          posArr[i3] = THREE.MathUtils.lerp(posArr[i3], goalX, settle);
+          posArr[i3 + 1] = THREE.MathUtils.lerp(posArr[i3 + 1], goalY, settle);
+          posArr[i3 + 2] = THREE.MathUtils.lerp(posArr[i3 + 2], goalZ, settle);
+        }
+      } else {
+        // 【聚合态物理】：所有粒子利用指数阻尼 lerp 平滑聚拢还原为完整圣诞树
+        const gatherLerp = 1 - Math.exp(-4.5 * delta);
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          velocities[i3] = 0;
+          velocities[i3 + 1] = 0;
+          velocities[i3 + 2] = 0;
+
+          posArr[i3] = THREE.MathUtils.lerp(posArr[i3], treePositions[i3], gatherLerp);
+          posArr[i3 + 1] = THREE.MathUtils.lerp(posArr[i3 + 1], treePositions[i3 + 1], gatherLerp);
+          posArr[i3 + 2] = THREE.MathUtils.lerp(posArr[i3 + 2], treePositions[i3 + 2], gatherLerp);
+        }
+      }
+      posAttr.needsUpdate = true;
+
+      // 树顶星随聚合/炸开缩放与呼吸闪烁
+      const starPulse = 1.0 + Math.sin(elapsed * 2.2) * 0.1;
+      const topperScale = Math.max(0.01, (1 - explodeProgress * 0.85) * 1.12 * starPulse);
+      topperStar.scale.set(topperScale, topperScale, 1);
+      topperMat.opacity = Math.max(0, 0.96 - explodeProgress * 0.9);
+
+      // 背景雪花缓慢飘落
+      const sArr = snowGeo.attributes.position.array;
+      for (let i = 0; i < snowCount; i++) {
+        const i3 = i * 3;
+        sArr[i3 + 1] -= snowSpeeds[i] * delta;
+        sArr[i3] += Math.sin(elapsed * 0.6 + i) * 0.004;
+        if (sArr[i3 + 1] < -1.2) {
+          sArr[i3 + 1] = 10.5;
+          sArr[i3] = (Math.random() - 0.5) * 18;
+        }
+      }
+      snowGeo.attributes.position.needsUpdate = true;
+
+      // 整体缓慢旋转
+      treeGroup.rotation.y += delta * 0.16;
+      starField.rotation.y -= delta * 0.018;
+
+      controls.update();
+      composer.render();
+    }
+
+    animate();
+  </script>
+</body>
+</html>
+```
